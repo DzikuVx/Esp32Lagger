@@ -49,12 +49,14 @@ void setup()
     uint64_t cardSize = SD.cardSize() / (1024 * 1024);
     Serial.printf("SD Card Size: %lluMB\n", cardSize);
 
-	hSerial.begin(250000, SERIAL_8N1, PIN_RX, PIN_TX);
+	hSerial.begin(115200, SERIAL_8N1, PIN_RX, PIN_TX);
 }
 
 File file;
 
 uint32_t lastByteReceived;
+
+#define BUFFER_SIZE 255
 
 void loop()
 {
@@ -64,9 +66,13 @@ void loop()
         isFileOpened = false;
     }
 
-    while(hSerial.available()) {
+    byte buffer[BUFFER_SIZE];
+
+    byte dataLength = hSerial.read(buffer, sizeof(buffer));
+
+    if (dataLength > 0) {
+
         lastByteReceived = millis();
-        byte c = hSerial.read();
 
         if (!isFileOpened) {
             file = SD.open("/LOG001.TXT", FILE_WRITE);
@@ -76,8 +82,9 @@ void loop()
         if (!file) {
             Serial.println("error opening file");
         } else {
-            file.write(c);
+            file.write(buffer, dataLength);
         }
 
     }
+
 }
