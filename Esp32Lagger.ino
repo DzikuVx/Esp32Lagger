@@ -55,8 +55,15 @@ void setup()
 File file;
 
 uint32_t lastByteReceived;
+uint32_t nextCleanupMs;
 
 #define BUFFER_SIZE 255
+
+String fileName;
+
+String findFileName() {
+    return "/LOG0001.TXT";
+}
 
 void loop()
 {
@@ -64,6 +71,7 @@ void loop()
     if (file && isFileOpened && lastByteReceived + 1000 < millis()) {
         file.close();
         isFileOpened = false;
+        Serial.println("File closed");
     }
 
     byte buffer[BUFFER_SIZE];
@@ -75,14 +83,28 @@ void loop()
         lastByteReceived = millis();
 
         if (!isFileOpened) {
-            file = SD.open("/LOG001.TXT", FILE_WRITE);
+            fileName = findFileName();
+
             isFileOpened = true;
+
+            nextCleanupMs = millis() + 2000; //Cleanup ever 2s
+            Serial.println("File created");
         }
 
         if (!file) {
             Serial.println("error opening file");
         } else {
             file.write(buffer, dataLength);
+        }
+
+        /*
+         * From time to time close and reopen the file to synch all changes to the file system
+         */
+        if (file && millis() > nextCleanupMs) {
+
+            file.flush();
+            Serial.println("Cleanup");
+            nextCleanupMs = millis() + 2000;
         }
 
     }
