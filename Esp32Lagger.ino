@@ -10,6 +10,12 @@
 #define PIN_SD_SCK 14
 #define PIN_SD_MISO 2
 
+/*
+ * ESP has total 1024 bytes of RAM used by all 3 UARTs as a buffer
+ * Default is 256 bytes, but increasing the value makes much more sense
+ */
+#define RX_BUFFER_SIZE 512
+
 HardwareSerial hSerial(1);
 
 bool isFileOpened = false;
@@ -50,6 +56,8 @@ void setup()
     Serial.printf("SD Card Size: %lluMB\n", cardSize);
 
 	hSerial.begin(115200, SERIAL_8N1, PIN_RX, PIN_TX);
+    // Set the buffer size
+    hSerial.setRxBufferSize(RX_BUFFER_SIZE);
 }
 
 File file;
@@ -84,7 +92,7 @@ void loop()
 
         if (!isFileOpened) {
             fileName = findFileName();
-
+            file = SD.open(fileName, FILE_WRITE);
             isFileOpened = true;
 
             nextCleanupMs = millis() + 2000; //Cleanup ever 2s
