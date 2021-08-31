@@ -21,6 +21,41 @@ HardwareSerial hSerial(1);
 bool isFileOpened = false;
 bool sdInitialized = false;
 
+File file;
+
+uint32_t lastByteReceived;
+uint32_t nextCleanupMs;
+
+#define BUFFER_SIZE 255
+
+String nextFileName;
+
+void left_fill_zeros(char* dest, const char* str, int length)
+{
+    sprintf(dest, "%.*d%s", (int)(length-strlen(str)), 0, str);
+}
+
+String findFileName() {
+
+    String name;
+    char filledIndex[10];
+    char notFilledIndex[10];
+
+    for (int i = 1; i < 1024; i++) {
+        sprintf(notFilledIndex, "%d", i);
+        left_fill_zeros(filledIndex, notFilledIndex, 5);
+
+        name = "/LOG" + String(filledIndex) + ".txt";
+
+        if (!SD.exists(name)) {
+            return name;
+        }
+    }
+    
+    //As a filsafe, return predefined name
+    return "/LOG0001.txt";
+}
+
 void setup()
 {
     Serial.begin(115200);
@@ -55,23 +90,13 @@ void setup()
     uint64_t cardSize = SD.cardSize() / (1024 * 1024);
     Serial.printf("SD Card Size: %lluMB\n", cardSize);
 
+    nextFileName = findFileName();
+    Serial.println("Next filename: " + nextFileName);
+
 	hSerial.begin(115200, SERIAL_8N1, PIN_RX, PIN_TX);
     // Set the buffer size
     hSerial.setRxBufferSize(RX_BUFFER_SIZE);
     hSerial.flush();
-}
-
-File file;
-
-uint32_t lastByteReceived;
-uint32_t nextCleanupMs;
-
-#define BUFFER_SIZE 255
-
-String fileName;
-
-String findFileName() {
-    return "/LOG0001.TXT";
 }
 
 void loop()
@@ -82,19 +107,20 @@ void loop()
         file.close();
         isFileOpened = false;
         Serial.println("File closed");
+        nextFileName = findFileName();
+        Serial.println("Next filename: " + nextFileName);
     }
 
     byte buffer[BUFFER_SIZE];
 
     byte dataLength = hSerial.read(buffer, sizeof(buffer));
 
-    if (dataLength > 0 && millis() > 100) {
+    if (dataLength > 0 && millis() > 500) {
 
         lastByteReceived = millis();
 
         if (!isFileOpened) {
-            fileName = findFileName();
-            file = SD.open(fileName, FILE_WRITE);
+            file = SD.open(nextFileName, FILE_WRITE);
             isFileOpened = true;
 
             nextCleanupMs = millis() + 2000; //Cleanup ever 2s
