@@ -58,6 +58,7 @@ void setup()
 	hSerial.begin(115200, SERIAL_8N1, PIN_RX, PIN_TX);
     // Set the buffer size
     hSerial.setRxBufferSize(RX_BUFFER_SIZE);
+    hSerial.flush();
 }
 
 File file;
@@ -74,7 +75,8 @@ String findFileName() {
 }
 
 void loop()
-{
+{ 
+
     //No data in 1 second, close the file
     if (file && isFileOpened && lastByteReceived + 1000 < millis()) {
         file.close();
@@ -86,7 +88,7 @@ void loop()
 
     byte dataLength = hSerial.read(buffer, sizeof(buffer));
 
-    if (dataLength > 0) {
+    if (dataLength > 0 && millis() > 100) {
 
         lastByteReceived = millis();
 
@@ -96,7 +98,7 @@ void loop()
             isFileOpened = true;
 
             nextCleanupMs = millis() + 2000; //Cleanup ever 2s
-            Serial.println("File created");
+            Serial.println("File created " + String(millis()) + " " + String(dataLength));
         }
 
         if (!file) {
