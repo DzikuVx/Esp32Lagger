@@ -2,6 +2,10 @@
 #include "SD.h"
 #include "SPI.h"
 
+#include <WiFi.h>
+#include <AsyncTCP.h>
+#include <ESPAsyncWebServer.h>
+
 #define PIN_RX 32
 #define PIN_TX 33
 
@@ -10,12 +14,16 @@
 #define PIN_SD_SCK 14
 #define PIN_SD_MISO 2
 
+const char* ssid = "Esp32Lagger";
+const char* password = "123456789";
+
 /*
  * ESP has total 1024 bytes of RAM used by all 3 UARTs as a buffer
  * Default is 256 bytes, but increasing the value makes much more sense
  */
 #define RX_BUFFER_SIZE 512
 
+AsyncWebServer server(80);
 HardwareSerial hSerial(1);
 
 bool isFileOpened = false;
@@ -56,9 +64,69 @@ String findFileName() {
     return "/LOG0001.txt";
 }
 
+void notFound(AsyncWebServerRequest *request) {
+    request->send(404, "text/plain", "Not found");
+}
+
+String fileList() {
+    String pageContent;
+    pageContent = "<!DOCTYPE html><html>";
+    pageContent += "<head><meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">";
+    pageContent += "<title>ESP32 Lagger</title>";
+    pageContent += "<link rel=\"icon\" href=\"data:,\">";
+    pageContent += "<style>html { font-family: Helvetica; display: inline-block; margin: 0px auto;}";
+    pageContent += "h1 { text-align: center;}";
+    pageContent += "ul li { font-size: 1.5em;}";
+    pageContent += ".button { background-color: #4CAF50; border: none; color: white; padding: 16px 40px; text-decoration: none; font-size: 30px; margin: 2px; cursor: pointer;}";
+    pageContent += ".button-small { background-color: #0000ff; border: none; color: white; padding: 8px 20px; text-decoration: none; font-size: 15px; margin: 2px; cursor: pointer;}";
+    pageContent += ".button2 {background-color: #ff0000;}";
+    pageContent += "</style></head>";
+    
+    pageContent += "<body>";
+    pageContent += "<h1>ESP32 Lagger</h1>";
+    
+    pageContent += "<ul>";
+
+    File root = SD.open("/");
+    File file = root.openNextFile();
+    while (file) {
+        if (!file.isDirectory()) {
+            pageContent += "<li><a href=\"/download?file=" + String(file.name()) + "\">" + String(file.name()) + "</a></li>";
+        }
+        file = root.openNextFile();
+    }
+    root.close();
+
+    pageContent += "</ul>";
+    
+    pageContent += "</body></html>";
+
+    return pageContent;
+}
+
 void setup()
 {
     Serial.begin(115200);
+
+    WiFi.softAP(ssid, password);
+    IPAddress IP = WiFi.softAPIP();
+    Serial.print("AP IP address: ");
+    Serial.println(IP);
+
+    /*
+     * Server paths definitions
+     */
+    server.on("/", HTTP_GET, [](AsyncWebServerRequest *request){
+        request->send(200, "text/html", fileList());
+    });
+
+    server.on("/download", HTTP_GET, [](AsyncWebServerRequest *request) {
+        String filename = request->getParam("file")->value();
+        request->send(SD, filename, "application/octet-stream", true);
+    });
+
+    server.onNotFound(notFound);
+    server.begin();
 
     SPI.begin(PIN_SD_SCK, PIN_SD_MISO, PIN_SD_MOSI, PIN_SD_CS);
     if (!SD.begin()) {
