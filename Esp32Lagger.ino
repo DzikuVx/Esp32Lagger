@@ -171,7 +171,7 @@ void setup()
     nextFileName = findFileName();
     Serial.println("Next filename: " + nextFileName);
 
-	hSerial.begin(115200, SERIAL_8N1, PIN_RX, PIN_TX);
+	hSerial.begin(250000, SERIAL_8N1, PIN_RX, PIN_TX);
     // Set the buffer size
     hSerial.setRxBufferSize(RX_BUFFER_SIZE);
     hSerial.flush();
@@ -276,49 +276,6 @@ void loop()
             deviceState = STATE_FINALIZE;
         }
     }
-
-    /*
-     * Read data from serial port if there are at last MIN_WRITE_SIZE bytes
-     * or every 500ms to get final portion of the log
-     */
-    // if (availabeBytes >= MIN_WRITE_SIZE || lastByteReceivedAt + 500 < millis()) {
-    //     byte dataLength = hSerial.read(buffer, sizeof(buffer));
-
-    //     if (dataLength > 0 && millis() > 500) {
-
-    //         lastByteReceivedAt = millis();
-
-            // if (!isFileOpened) {
-            //     file = SD.open(nextFileName, FILE_WRITE);
-            //     isFileOpened = true;
-
-            //     nextCleanupMs = millis() + 2000; //Cleanup ever 2s
-            //     Serial.println("File created " + String(millis()) + " " + String(dataLength));
-            // }
-
-            // if (!file) {
-            //     Serial.println("error opening file");
-            // } else {
-
-            //     uint32_t start = micros();
-
-            //     file.write(buffer, dataLength);
-
-            //     if (dataLength > 1) {
-            //         sdCardTime += (micros() - start); //Log how many microseconds it took to write to SD card
-            //     }
-            // }
-
-            // /*
-            // * From time to time close and reopen the file to synch all changes to the file system
-            // */
-            // if (file && millis() > nextCleanupMs) {
-            //     file.flush();
-            //     Serial.println("Cleanup");
-            //     nextCleanupMs = millis() + 2000;
-            // }
-        // }
-    // }
 
     /*
      * Write SD card usage statistics
