@@ -33,10 +33,18 @@ bool sdInitialized = false;
 
 File file;
 
-uint32_t lastByteReceived;
+uint32_t lastByteReceivedAt;
 uint32_t nextCleanupMs;
 uint32_t nextStatsMs;
+uint32_t lastZeroAtMs;
 
+typedef enum {
+    STATE_WAITING_FOR_STREAM,
+    STATE_WRITING,
+    STATE_FINALIZE
+} State_t; 
+
+State_t deviceState = STATE_WAITING_FOR_STREAM;
 
 String nextFileName;
 
@@ -163,41 +171,75 @@ void setup()
     nextFileName = findFileName();
     Serial.println("Next filename: " + nextFileName);
 
-	hSerial.begin(115200, SERIAL_8N1, PIN_RX, PIN_TX);
+	hSerial.begin(250000, SERIAL_8N1, PIN_RX, PIN_TX);
     // Set the buffer size
     hSerial.setRxBufferSize(RX_BUFFER_SIZE);
     hSerial.flush();
 }
 
 uint32_t sdCardTime;
+uint32_t previousAvailableBytes = 0;
 
 void loop()
 { 
+    byte buffer[BUFFER_SIZE];
 
-    //No data in 1 second, close the file
-    if (file && isFileOpened && lastByteReceived + 1000 < millis()) {
+    if (deviceState == STATE_WAITING_FOR_STREAM) {
+
+        uint32_t availabeBytes = hSerial.available();
+
+        if (availabeBytes > previousAvailableBytes) {
+            lastByteReceivedAt = millis();
+        }
+
+        /*
+         * If data is not coming fast enought, flush the buffer
+         */
+        if (millis() - lastByteReceivedAt > 250) {
+            availabeBytes = 0;
+            previousAvailableBytes = 0;
+            hSerial.flush();
+        }
+
+        /*
+         * Buffer accumulated enough data to start writing
+         */
+        if (availabeBytes >= MIN_WRITE_SIZE) {
+            nextFileName = findFileName();
+            Serial.println("Next filename: " + nextFileName);
+            deviceState = STATE_WRITING;
+        }
+
+        previousAvailableBytes = availabeBytes;
+
+    } else if (deviceState == STATE_FINALIZE) {
+        /*
+         * Finalize the file
+         */
         file.close();
         isFileOpened = false;
         Serial.println("File closed");
-        nextFileName = findFileName();
-        Serial.println("Next filename: " + nextFileName);
-    }
 
-    byte buffer[BUFFER_SIZE];
+        hSerial.flush();
+        previousAvailableBytes = 0;
 
-    uint32_t availabeBytes = hSerial.available();
+        //Set state to waiting for stream, as this is the only place where we can go
+        deviceState = STATE_WAITING_FOR_STREAM;
 
-    /*
-     * Read data from serial port if there are at last MIN_WRITE_SIZE bytes
-     * or every 500ms to get final portion of the log
-     */
-    if (availabeBytes >= MIN_WRITE_SIZE || lastByteReceived + 500 < millis()) {
+    } else {
+        /*
+         * everything else means that we are writing to file
+         */ 
+
+        //Read data from serial
         byte dataLength = hSerial.read(buffer, sizeof(buffer));
 
-        if (dataLength > 0 && millis() > 500) {
+        //If there is any new data, write it to file
+        if (dataLength > 0) {
 
-            lastByteReceived = millis();
+            lastByteReceivedAt = millis();
 
+            //If file is not opened, open it
             if (!isFileOpened) {
                 file = SD.open(nextFileName, FILE_WRITE);
                 isFileOpened = true;
@@ -209,27 +251,29 @@ void loop()
             if (!file) {
                 Serial.println("error opening file");
             } else {
-
                 uint32_t start = micros();
 
                 file.write(buffer, dataLength);
 
                 if (dataLength > 1) {
                     sdCardTime += (micros() - start); //Log how many microseconds it took to write to SD card
-
-                    // Serial.println(String(dataLength) + " " + String(micros() - start));
                 }
             }
+        }
 
-            /*
-            * From time to time close and reopen the file to synch all changes to the file system
-            */
-            if (file && millis() > nextCleanupMs) {
+        /*
+        * From time to time close and reopen the file to synch all changes to the file system
+        */
+        if (file && millis() > nextCleanupMs) {
+            file.flush();
+            Serial.println("Cleanup");
+            nextCleanupMs = millis() + 2000;
+        }
 
-                file.flush();
-                Serial.println("Cleanup");
-                nextCleanupMs = millis() + 2000;
-            }
+        //detect if there is no more data coming from serial to finalize the file
+        if (isFileOpened && lastByteReceivedAt + 500 < millis()) {
+            //If there is no new data coming from serial for 500ms, finalize the file
+            deviceState = STATE_FINALIZE;
         }
     }
 
